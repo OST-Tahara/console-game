@@ -1,0 +1,65 @@
+i = 0
+
+stage(i) = 30 : i++
+stage(i) = 20 : i++
+
+//player
+stage(i) = 14 : i++
+stage(i) = 19 : i++
+
+// enemy
+enemy_count_index = i
+enemy_count = 0
+stage(i) = enemy_count : i++   // count
+
+enemy  = "000011110011110011110011110000"
+enemy += "000011110011110011110011110000"
+enemy += "000011110011110011110011110000"
+
+repeat 3
+    y = cnt
+	repeat 30
+		x = cnt
+	
+	    index = y * 30 + x
+		if( strmid(enemy, index, 1)  == "1" ) {
+			stage(i) = x    : i++
+			stage(i) = y+1 : i++
+			enemy_count++
+		}
+	loop
+loop
+
+stage(enemy_count_index) = enemy_count
+
+
+//wall
+wall_count_index = i
+wall_count = 0
+stage(i) = wall_count : i++   // count
+
+wall  = "001111110000111111000011111100"
+wall += "001111110000111111000011111100"
+wall += "001111110000111111000011111100"
+
+repeat 3
+    y = cnt
+	repeat 30
+		x = cnt
+	
+	    index = y * 30 + x
+		if( strmid(wall, index, 1)  == "1" ) {
+			stage(i) = x    : i++
+			stage(i) = y+14 : i++
+			wall_count++
+		}
+	loop
+loop
+
+stage(wall_count_index) = wall_count
+
+
+bsave "stage.dat", stage, i*4, 0
+
+
+end
