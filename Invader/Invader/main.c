@@ -1,93 +1,126 @@
+/**
+ * @file  main.c
+ */
+
+/**
+ * @mainpage シンプルなインベーダゲーム
+ *
+ * @par ゲーム内容
+ * 普通のインベーダゲーム
+ * [SPACE] 弾の発射
+ * [←→]  移動
+ * 
+ * @par コンセプト
+ * C言語初心者の理解の助けになるようなプログラム作成。
+ * できるだけシンプルに！
+ * だけども改修し易い構造に!
+ *
+ * @par ステージの管理
+ * 外部ファイル[stage.dat]にステージのデータを保持
+ *   - ステージのサイズ
+ *   - プレイヤーの初期位置
+ *   - 敵の情報
+ *   - 壁の情報
+ *
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <Windows.h>
+#include "game_object.h"
 #include "Utility.h"
 
 
-static int stage_width  = 0;
-static int stage_height = 0;
+static int stage_width  = 0;   ///< ステージの幅
+static int stage_height = 0;   ///< ステージの高さ
+
+/**
+ * @enum  game_status_t
+ * @brief ゲームの動作状態
+ */
+typedef enum
+{
+    game_status_title = 0,   ///< タイトル画面
+    game_status_playing,     ///< プレイ画面
+    game_status_gameover     ///< ゲームオーバー画面
+} game_status_t;
+
+typedef struct
+{
+    int count;
+    game_object_t *list;
+} object_list_t;
+
 
 //---------------------------------------------------------
 // 弾
 //---------------------------------------------------------
 
-typedef struct 
+/**
+ * @brief 弾の初期化
+ */
+static void InitBullets( object_list_t *list, int max )
 {
-    int enable;
-    int x;
-    int y;
-    int speed_x;
-    int speed_y;
-    int move_limit_count;
-} BulletStatus;
-
-static BulletStatus *bullets = NULL;
-static int bullets_count = 0;
-
-static void InitBullets( void )
-{
-    bullets_count = 100;
-    bullets = malloc( bullets_count * sizeof(BulletStatus) );
+    list->count = max;
+    list->list  = malloc( sizeof(game_object_t) * list->count );
 
     int i;
-    for( i = 0; i < bullets_count; i++ )
+    for( i = 0; i < list->count; i++ )
     {
-        bullets[i].enable = 0;
+        list->list[i].alive = 0;
     }
 }
 
 
-static void AddBullet( int x, int y, int speed_x, int speed_y )
+/**
+ * @brief
+ */
+static void AddBullet( object_list_t *list, int x, int y, direct_t move_direct )
 {
     int i;
-    for( i = 0; i < bullets_count; i++ )
+    for( i = 0; i < list->count; i++ )
     {
-        if( bullets[i].enable == 0 ) 
+        if( list->list[i].alive == 0 )
         {
-            bullets[i].enable  = 1;
-            bullets[i].x       = x;
-            bullets[i].y       = y;
-            bullets[i].speed_x = speed_x;
-            bullets[i].speed_y = speed_y;
-            bullets[i].move_limit_count = 5;
-
+            list->list[i].alive = 1;
+            list->list[i].x     = x;
+            list->list[i].y     = y;
+            list->list[i].move_direct   = move_direct;
+            list->list[i].move_interval = 5;
+            list->list[i].move_count    = 0;
             break;
         }
     }
 }
 
 
-static void MoveBullets( void )
+static void MoveBullets( object_list_t *list )
 {
     int i;
-    for( i = 0; i < bullets_count; i++ )
+    for( i = 0; i < list->count; i++ )
     {
-        if( bullets[i].enable == 0 ) continue;
-        if( bullets[i].move_limit_count > 0 )
+        if( list->list[i].alive )
         {
-            bullets[i].move_limit_count--;
-            continue;
+            MoveObject( &list->list[i] );
+
+            if( IsOutside( &list->list[i], stage_width, stage_height ) )
+            {
+                list->list[i].alive = 0;
+            }
         }
-        bullets[i].move_limit_count = 5;
-
-        bullets[i].x += bullets[i].speed_x;
-        bullets[i].y += bullets[i].speed_y;
-
-        if( (bullets[i].x < 0) || (bullets[i].x > (stage_width -1)) ) bullets[i].enable = 0;
-        if( (bullets[i].y < 0) || (bullets[i].y > (stage_height-1)) ) bullets[i].enable = 0;
     }
 }
 
 
-static void PrintBullets( void )
+static void PrintBullets( object_list_t *list )
 {
     int i;
-    for( i = 0; i < bullets_count; i++ )
+    for( i = 0; i < list->count; i++ )
     {
-        if( bullets[i].enable )
+        if( list->list[i].alive )
         {
-            PutCharConsole( bullets[i].x, bullets[i].y, '|' );
+            PutCharConsole( list->list[i].x, list->list[i].y, '|' );
         }
     }
 }
@@ -97,63 +130,46 @@ static void PrintBullets( void )
 // プレイヤー
 //---------------------------------------------------------
 
-static int player_x = 0;
-static int player_y = 0;
-
-static void InitPlayer( FILE *file ) 
+static void InitPlayer( FILE *file, object_list_t *list ) 
 {
-    fread( &player_x, sizeof(int), 1, file );
-    fread( &player_y, sizeof(int), 1, file );
+    list->count                 = 1;
+    list->list                  = malloc( sizeof(game_object_t) * list->count );
+    list->list[0].alive         = 1;
+    list->list[0].move_direct   = direct_none;
+    list->list[0].move_count    = 0;
+    list->list[0].move_interval = 5;
+
+    fread( &list->list[0].x, sizeof(int), 1, file );
+    fread( &list->list[0].y, sizeof(int), 1, file );
 }
 
 
-static void MovePlayer( void )
+static void MovePlayer( object_list_t *list, int key_left, int key_right )
 {
-    static int move_limit_count = 0;
+    list->list[0].move_direct = direct_none;
+    if( (key_left  == InputStatePush) || (key_left  == InputStatePushing) ) list->list[0].move_direct = direct_left;
+    if( (key_right == InputStatePush) || (key_right == InputStatePushing) ) list->list[0].move_direct = direct_right;
 
-    if( move_limit_count > 0)
-    {
-        move_limit_count--;
-        return;
-    }
+    MoveObject( &list->list[0] );
 
-    int key_left  = GetKeyStatus(VK_LEFT);
-    int key_right = GetKeyStatus(VK_RIGHT);
-
-    if( (key_left == InputStatePush) || (key_left == InputStatePushing) )
-    {
-        if( player_x > 0 )
-        {
-            player_x--;
-            move_limit_count = 5;
-        }
-    }
-
-    if( (key_right == InputStatePush) || (key_right == InputStatePushing) )
-    {
-        if( player_x < (stage_width-1) )
-        {
-            player_x++;
-            move_limit_count = 5;
-        }
-    }
+    int outside = IsOutside( &list->list[0], stage_width, stage_height );
+    if     ( outside == OUTSIDE_LEFT  ) list->list[0].x = 0;
+    else if( outside == OUTSIDE_RIGHT ) list->list[0].x = stage_width - 1;
 }
 
 
-static void FirePlayer( void )
+static void FirePlayer( object_list_t *list_player, int key_space, object_list_t *list_bullet )
 {
-    int key_space  = GetKeyStatus(VK_SPACE);
-
     if( key_space == InputStatePush )
     {
-        AddBullet( player_x, player_y-1, 0, -1 );
+        AddBullet( list_bullet, list_player->list[0].x,list_player->list[0].y - 1, direct_up );
     }
 }
 
 
-static void PrintPlayer( void )
+static void PrintPlayer( object_list_t *list_player )
 {
-    PutCharConsole( player_x, player_y, '@' );
+    PutCharConsole( list_player->list[0].x, list_player->list[0].y, '@' );
 }
 
 
@@ -161,119 +177,93 @@ static void PrintPlayer( void )
 // 敵
 //---------------------------------------------------------
 
-typedef struct 
+static direct_t enemy_move_direct   = direct_none;
+static int      enemy_move_interval = 0;
+static int      enemy_move_count    = 0;
+
+static void InitEnemys( FILE *file, object_list_t *list )
 {
-    int enable;
-    int x;
-    int y;
-} EnemyStatus;
-
-static EnemyStatus *enemys = NULL;
-static int enemys_count = 0;
-
-static int enemys_speed_x = 0;
-static int enemys_speed_y = 0;
-
-static void InitEnemys( FILE *file )
-{
-    fread( &enemys_count, sizeof(int), 1, file );
-    enemys = malloc( enemys_count * sizeof(EnemyStatus) );
+    fread( &list->count, sizeof(int), 1, file );
+    list->list = malloc( sizeof(game_object_t) * list->count );
 
     int i;
-    for( i = 0; i < enemys_count; i++ )
+    for( i = 0; i < list->count; i++ )
     {
-        enemys[i].enable = 1;
-        fread( &enemys[i].x, sizeof(int), 1, file );
-        fread( &enemys[i].y, sizeof(int), 1, file );
+        list->list[i].alive = 1;
+        fread( &list->list[i].x, sizeof(int), 1, file );
+        fread( &list->list[i].y, sizeof(int), 1, file );
     }
 
-    enemys_speed_x = 1;
-    enemys_speed_y = 0;
+    enemy_move_direct   = direct_right;
+    enemy_move_interval = 10;
+    enemy_move_count    = 0;
 }
 
 
-static void MoveEnemys( void )
+static void MoveEnemys( object_list_t *list )
 {
-    static int move_limit_count = 10;
-
-    if( move_limit_count > 0)
-    {
-        move_limit_count--;
-        return;
-    }
-    move_limit_count = 10;
-
     // 移動
-    int i;
-    for( i = 0; i < enemys_count; i++ )
+    int i, move_i = 0;
+    for( i = 0; i < list->count; i++ )
     {
-        if( enemys[i].enable )
-        {
-            enemys[i].x += enemys_speed_x;
-            enemys[i].y += enemys_speed_y;
-        }
+        list->list[i].move_direct   = enemy_move_direct;
+        list->list[i].move_interval = enemy_move_interval;
+        list->list[i].move_count    = enemy_move_count;
+
+        if( MoveObject( &list->list[i] ) ) move_i = i;
     }
+
+    enemy_move_direct   = list->list[move_i].move_direct;
+    enemy_move_interval = list->list[move_i].move_interval;
+    enemy_move_count    = list->list[move_i].move_count;
 
     // 端検索
-    int edge_left  = 0;
-    int edge_right = 0;
-    for( i = 0; i < enemys_count; i++ )
+    int edge = 0;
+    for( i = 0; i < list->count; i++ )
     {
-        if( enemys[i].enable )
+        edge = IsEdge( &list->list[i], stage_width, stage_height );
+        if( (edge & EDGE_LEFT) || (edge & EDGE_RIGHT) )
         {
-            if( enemys[i].x <= 0 )
+            if( enemy_move_direct == direct_down )
             {
-                edge_left = 1;
-                break;
+                if( edge & EDGE_LEFT ) enemy_move_direct = direct_right;
+                else                   enemy_move_direct = direct_left;
             }
-            if( enemys[i].x >= (stage_width-1) )
+            else
             {
-                edge_right = 1;
-                break;
+                enemy_move_direct = direct_down;
             }
-        }
-    }
 
-    if( edge_left || edge_right )
-    {
-        if( enemys_speed_y == 0 )
-        {
-            enemys_speed_x = 0;
-            enemys_speed_y = 1;
-        }
-        else
-        {
-            enemys_speed_x = ( edge_left ) ? 1 : -1;
-            enemys_speed_y = 0;
+            break;
         }
     }
 }
 
 
-static void FireEnemys( void )
+static void FireEnemys( object_list_t *list_player, object_list_t *list_bullet )
 {
     int i;
-    for( i = 0; i < enemys_count; i++ )
+    for( i = 0; i < list_player->count; i++ )
     {
-        if( enemys[i].enable )
+        if( list_player->list[i].alive )
         {
             if( rand() % 1000 == 0 )
             {
-                AddBullet( enemys[i].x, enemys[i].y+1, 0, 1 );
+                AddBullet( list_bullet, list_player->list[i].x, list_player->list[i].y+1, direct_down );
             }
         }
     }
 }
 
 
-static void PrintEnemys( void )
+static void PrintEnemys( object_list_t *list )
 {
     int i;
-    for( i = 0; i < enemys_count; i++ )
+    for( i = 0; i < list->count; i++ )
     {
-        if( enemys[i].enable )
+        if( list->list[i].alive )
         {
-            PutCharConsole( enemys[i].x, enemys[i].y, 'Q' );
+            PutCharConsole( list->list[i].x, list->list[i].y, 'Q' );
         }
     }
 }
@@ -283,40 +273,29 @@ static void PrintEnemys( void )
 // 壁
 //---------------------------------------------------------
 
-typedef struct 
+static void InitWalls( FILE *file, object_list_t *list )
 {
-    int enable;
-    int x;
-    int y;
-} WallStatus;
-
-static WallStatus *walls = NULL;
-static int walls_count = 0;
-
-
-static void InitWalls( FILE *file )
-{
-    fread( &walls_count, sizeof(int), 1, file );
-    walls = malloc( walls_count * sizeof(WallStatus) );
+    fread( &list->count, sizeof(int), 1, file );
+    list->list = malloc( sizeof(game_object_t) * list->count );
 
     int i;
-    for( i = 0; i < walls_count; i++ )
+    for( i = 0; i < list->count; i++ )
     {
-        walls[i].enable = 1;
-        fread( &walls[i].x, sizeof(int), 1, file );
-        fread( &walls[i].y, sizeof(int), 1, file );
+        list->list[i].alive = 1;
+        fread( &list->list[i].x, sizeof(int), 1, file );
+        fread( &list->list[i].y, sizeof(int), 1, file );
     }
 }
 
 
-static void PrintWalls( void )
+static void PrintWalls( object_list_t *list )
 {
     int i;
-    for( i = 0; i < walls_count; i++ )
+    for( i = 0; i < list->count; i++ )
     {
-        if( walls[i].enable )
+        if( list->list[i].alive )
         {
-            PutCharConsole( walls[i].x, walls[i].y, '#' );
+            PutCharConsole( list->list[i].x, list->list[i].y, '#' );
         }
     }
 }
@@ -326,144 +305,79 @@ static void PrintWalls( void )
 // ゲーム制御
 //---------------------------------------------------------
 
-static void Collision( void )
+static object_list_t list_bullet_enemy;
+static object_list_t list_bullet_player;
+static object_list_t list_player;
+static object_list_t list_enemy;
+static object_list_t list_wall;
+
+static void Collision( object_list_t *obj1, object_list_t *obj2 )
 {
-    int bullet_i, enemy_i, wall_i;
+    int i, j;
 
-    // 弾 <-> 敵
-    for( bullet_i = 0; bullet_i < bullets_count; bullet_i++ )
+    for( i = 0; i < obj1->count; i++ )
     {
-        if( bullets[bullet_i].enable == 0 ) continue;
+        if( obj1->list[i].alive == 0 ) continue;
 
-        int b_x = bullets[bullet_i].x;
-        int b_y = bullets[bullet_i].y;
-
-        for( enemy_i = 0; enemy_i < enemys_count; enemy_i++ )
+        for( j = 0; j < obj2->count; j++ )
         {
-            if( enemys[enemy_i].enable == 0 ) continue;
+            if( obj1->list[j].alive == 0 ) continue;
 
-            int e_x = enemys[enemy_i].x;
-            int e_y = enemys[enemy_i].y;
-
-            if( (b_x == e_x) && (b_y == e_y) )
+            if( (obj1->list[i].x == obj2->list[j].x) && (obj1->list[i].y == obj2->list[j].y) )
             {
-                bullets[bullet_i].enable = 0;
-                enemys[enemy_i].enable   = 0;
+                obj1->list[i].alive = 0;
+                obj2->list[j].alive = 0;
             }
         }
     }
-
-    // 弾 <-> 自機
-    for( bullet_i = 0; bullet_i < bullets_count; bullet_i++ )
-    {
-        if( bullets[bullet_i].enable == 0 ) continue;
-
-        int b_x = bullets[bullet_i].x;
-        int b_y = bullets[bullet_i].y;
-
-        if( (b_x == player_x) && (b_y == player_y) )
-        {
-            // @todo
-        }
-    }
-
-    // 弾 <-> 壁
-    for( bullet_i = 0; bullet_i < bullets_count; bullet_i++ )
-    {
-        if( bullets[bullet_i].enable == 0 ) continue;
-
-        int b_x = bullets[bullet_i].x;
-        int b_y = bullets[bullet_i].y;
-
-        for( wall_i = 0; wall_i < walls_count; wall_i++ )
-        {
-            if( walls[wall_i].enable == 0 ) continue;
-
-            int w_x = walls[wall_i].x;
-            int w_y = walls[wall_i].y;
-
-            if( (b_x == w_x) && (b_y == w_y) )
-            {
-                bullets[bullet_i].enable = 0;
-                walls[wall_i].enable     = 0;
-            }
-        }
-    }
-
-    // 敵 <-> 自機
-    for( enemy_i = 0; enemy_i < enemys_count; enemy_i++ )
-    {
-        if( enemys[enemy_i].enable == 0 ) continue;
-
-        int e_x = enemys[enemy_i].x;
-        int e_y = enemys[enemy_i].y;
-
-        if( (e_x == player_x) && (e_y == player_y) )
-        {
-            // @todo
-        }
-    }
-
-    // 敵 <-> 壁
-    for( enemy_i = 0; enemy_i < enemys_count; enemy_i++ )
-    {
-        if( enemys[enemy_i].enable == 0 ) continue;
-
-        int e_x = enemys[enemy_i].x;
-        int e_y = enemys[enemy_i].y;
-
-        for( wall_i = 0; wall_i < walls_count; wall_i++ )
-        {
-            if( walls[wall_i].enable == 0 ) continue;
-
-            int w_x = walls[wall_i].x;
-            int w_y = walls[wall_i].y;
-
-            if( (e_x == w_x) && (e_y == w_y) )
-            {
-                enemys[enemy_i].enable = 0;
-                walls[wall_i].enable   = 0;
-            }
-        }
-    }
-
 }
+
 
 int main()
 {
     FILE *stage_file = fopen( "stage.dat", "rb" );
+    // @todo ファイルオープン失敗処理
     
     fread( &stage_width,  sizeof(int), 1, stage_file );
     fread( &stage_height, sizeof(int), 1, stage_file );
 
     InitConsole( stage_width, stage_height );
-    InitPlayer ( stage_file );
-    InitEnemys ( stage_file );
-    InitWalls  ( stage_file );
-    InitBullets();
+    InitPlayer ( stage_file, &list_player );
+    InitEnemys ( stage_file, &list_enemy );
+    InitWalls  ( stage_file, &list_wall );
+    InitBullets( &list_bullet_player, 100 );
+    InitBullets( &list_bullet_enemy,  100 );
 
     fclose( stage_file );
 
-    srand(time(NULL));
+    srand( (unsigned int)time(NULL) );
 
     while( 1 )
     {
         UpdateKeyStatus();
         ClrConsole();
 
-        MovePlayer();
-        MoveEnemys();
-        MoveBullets();
+        MovePlayer ( &list_player, GetKeyStatus(VK_LEFT), GetKeyStatus(VK_RIGHT) );
+        MoveEnemys ( &list_enemy         );
+        MoveBullets( &list_bullet_enemy  );
+        MoveBullets( &list_bullet_player );
 
-        FirePlayer();
-        FireEnemys();
+        FirePlayer( &list_player, GetKeyStatus(VK_SPACE), &list_bullet_player );
+        FireEnemys( &list_enemy, &list_bullet_enemy );
 
-        Collision();
+        Collision( &list_enemy,         &list_bullet_player );
+        Collision( &list_enemy,         &list_wall          );
+        Collision( &list_wall,          &list_bullet_enemy  );
+        Collision( &list_wall,          &list_bullet_player );
+        Collision( &list_bullet_player, &list_bullet_enemy  );
+        Collision( &list_player,        &list_bullet_enemy  );
+        Collision( &list_enemy,         &list_player        );
 
-        PrintWalls();
-        PrintBullets();
-        PrintPlayer();
-        PrintEnemys();
+        PrintWalls  ( &list_wall          );
+        PrintBullets( &list_bullet_player );
+        PrintBullets( &list_bullet_enemy  );
+        PrintPlayer ( &list_player        );
+        PrintEnemys ( &list_enemy         );
 
         UpdateConsole();
         Sleep( 1000 / 50 );

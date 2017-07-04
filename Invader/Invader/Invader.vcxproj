@@ -19,10 +19,12 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="game_object.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="Utility.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="game_object.h" />
     <ClInclude Include="Utility.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
