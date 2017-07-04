@@ -81,16 +81,15 @@ static void AddBullet( object_list_t *list, int x, int y, direct_t move_direct )
     int i;
     for( i = 0; i < list->count; i++ )
     {
-        if( list->list[i].alive == 0 )
-        {
-            list->list[i].alive = 1;
-            list->list[i].x     = x;
-            list->list[i].y     = y;
-            list->list[i].move_direct   = move_direct;
-            list->list[i].move_interval = 5;
-            list->list[i].move_count    = 0;
-            break;
-        }
+        if( list->list[i].alive ) continue;
+
+        list->list[i].alive = 1;
+        list->list[i].x     = x;
+        list->list[i].y     = y;
+        list->list[i].move_direct   = move_direct;
+        list->list[i].move_interval = 5;
+        list->list[i].move_count    = 0;
+        break;
     }
 }
 
@@ -100,14 +99,13 @@ static void MoveBullets( object_list_t *list )
     int i;
     for( i = 0; i < list->count; i++ )
     {
-        if( list->list[i].alive )
-        {
-            MoveObject( &list->list[i] );
+        if( list->list[i].alive == 0 ) continue;
 
-            if( IsOutside( &list->list[i], stage_width, stage_height ) )
-            {
-                list->list[i].alive = 0;
-            }
+        MoveObject( &list->list[i] );
+
+        if( IsOutside( &list->list[i], stage_width, stage_height ) )
+        {
+            list->list[i].alive = 0;
         }
     }
 }
@@ -118,10 +116,9 @@ static void PrintBullets( object_list_t *list )
     int i;
     for( i = 0; i < list->count; i++ )
     {
-        if( list->list[i].alive )
-        {
-            PutCharConsole( list->list[i].x, list->list[i].y, '|' );
-        }
+        if( list->list[i].alive == 0 ) continue;
+
+        PutCharConsole( list->list[i].x, list->list[i].y, '|' );
     }
 }
 
@@ -245,12 +242,11 @@ static void FireEnemys( object_list_t *list_player, object_list_t *list_bullet )
     int i;
     for( i = 0; i < list_player->count; i++ )
     {
-        if( list_player->list[i].alive )
+        if( list_player->list[i].alive == 0 ) continue;
+
+        if( rand() % 1000 == 0 )
         {
-            if( rand() % 1000 == 0 )
-            {
-                AddBullet( list_bullet, list_player->list[i].x, list_player->list[i].y+1, direct_down );
-            }
+            AddBullet( list_bullet, list_player->list[i].x, list_player->list[i].y+1, direct_down );
         }
     }
 }
@@ -261,10 +257,9 @@ static void PrintEnemys( object_list_t *list )
     int i;
     for( i = 0; i < list->count; i++ )
     {
-        if( list->list[i].alive )
-        {
-            PutCharConsole( list->list[i].x, list->list[i].y, 'Q' );
-        }
+        if( list->list[i].alive == 0 ) continue;
+
+        PutCharConsole( list->list[i].x, list->list[i].y, 'Q' );
     }
 }
 
@@ -293,10 +288,9 @@ static void PrintWalls( object_list_t *list )
     int i;
     for( i = 0; i < list->count; i++ )
     {
-        if( list->list[i].alive )
-        {
-            PutCharConsole( list->list[i].x, list->list[i].y, '#' );
-        }
+        if( list->list[i].alive == 0 ) continue;
+
+        PutCharConsole( list->list[i].x, list->list[i].y, '#' );
     }
 }
 
@@ -321,7 +315,7 @@ static void Collision( object_list_t *obj1, object_list_t *obj2 )
 
         for( j = 0; j < obj2->count; j++ )
         {
-            if( obj1->list[j].alive == 0 ) continue;
+            if( obj2->list[j].alive == 0 ) continue;
 
             if( (obj1->list[i].x == obj2->list[j].x) && (obj1->list[i].y == obj2->list[j].y) )
             {
@@ -342,11 +336,11 @@ int main()
     fread( &stage_height, sizeof(int), 1, stage_file );
 
     InitConsole( stage_width, stage_height );
-    InitPlayer ( stage_file, &list_player );
-    InitEnemys ( stage_file, &list_enemy );
-    InitWalls  ( stage_file, &list_wall );
-    InitBullets( &list_bullet_player, 100 );
-    InitBullets( &list_bullet_enemy,  100 );
+    InitPlayer ( stage_file, &list_player  );
+    InitEnemys ( stage_file, &list_enemy   );
+    InitWalls  ( stage_file, &list_wall    );
+    InitBullets( &list_bullet_player, 100  );
+    InitBullets( &list_bullet_enemy,  100  );
 
     fclose( stage_file );
 
